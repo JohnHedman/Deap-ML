@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import scipy.stats as sc
 import time
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, Dropout, Conv1D
 from keras.wrappers.scikit_learn import KerasClassifier
-from keras.utils import np_utils
+from keras.utils import np_utils, plot_model
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import LabelEncoder
@@ -44,19 +44,6 @@ def make_valence_labels(valence_array):
 
     return valence_label_array
 
-def baseline_model():
-    # Create the model
-    model = Sequential()
-    model.add(Dense(8, input_dim=4, activation='relu'))
-    model.add(Dense(3, activation='softmax'))
-
-    # Compile the model
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    
-    # Return the model
-    return model
-
-
 # Open file of the first patient, put it in numpy table
 s1_file = open("./data_preprocessed_python/s01.dat", "rb")
 s1 = pickle.load(s1_file,fix_imports=True, encoding="latin1")
@@ -74,7 +61,7 @@ s1_power = np.zeros(shape=(40,40))
 # Find power for each video (x) and each channel (y)
 for x in range(0,40):
     for y in range(0,40):
-        s1_power[x, y] = find_power(s1_data[x,y,:])
+        s1_power[x, y] = find_power(s1_data[x,y,1664:])
 
 # Make the Classifier
 start_time = time.time()
@@ -92,24 +79,20 @@ encoder = LabelEncoder()
 encoder.fit(Y)
 encoded_Y = encoder.transform(Y)
 
-print("Encoded Y: ", encoded_Y)
-print(Y)
-
 # Conert integers to dummy variables
-dummy_y = np_utils.to_categorical(encoded_Y)
+category_y = np_utils.to_categorical(encoded_Y)
 
-# Build the Keras Classifier
-# build_fn will call baseline_model function that was defined
-estimator = KerasClassifier(build_fn=baseline_model, epochs=200, batch_size=5, verbose=0)
+# create model
+model = Sequential()
+model.add(Conv1D(32, (3), input_shape=(40,8064)))
+model.add(Dense(3, activation='softmax'))
 
-# Build the estimator that will be use to evaluate the model we created
-kfold = KFold(n_splits=10, shuffle=True, random_state=seed)
+# Compile model
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+# Fit the model
+model.fit(s1_data, category_y, validation_split=0.1, epochs=100, batch_size=36, shuffle=True)
 
-# Run the model we built using the estimator as a guideline, print the final results
-results = cross_val_score(estimator, X, dummy_y, cv=kfold)
-print("Baseline: %.2f%% (%.2f%%)" % (results.mean()*100, results.std()*100))
+#print(model.get_layer(index=0).get_weights())
 
 total_time = time.time() - start_time
 print("Total Time: ", total_time)
-
-
